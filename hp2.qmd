@@ -1,0 +1,228 @@
+---
+title: "Holder Final: Word Association Data"
+author: "Mary Holder"
+format: html
+editor: visual
+echo: false
+warning: false
+---
+
+## Introduction
+
+```{r}
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(ggalluvial)
+library(knitr)
+library(kableExtra)
+library(tinytable)
+library(gt)
+library(ggthemes)
+```
+
+```{r}
+here::i_am("data/Cue_Target_Pairs.A-B")
+#Import csv files
+ab <- read.csv(here("data/Cue_Target_Pairs.A-B"), skip=3, dec=".", strip.white=TRUE)
+c <- read.csv(here("data/Cue_Target_Pairs.C"), skip=3, dec=".", strip.white=TRUE)
+df_c <- read.csv(here("data/Cue_Target_Pairs.D-F"), skip=3, dec=".", strip.white=TRUE)
+gk <- read.csv(here("data/Cue_Target_Pairs.G-K"), skip=3, dec=".", strip.white=TRUE)
+lo <- read.csv(here("data/Cue_Target_Pairs.L-O"), skip=3, dec=".", strip.white=TRUE)
+pr <- read.csv(here("data/Cue_Target_Pairs.P-R"), skip=3, dec=".", strip.white=TRUE)
+s <- read.csv(here("data/Cue_Target_Pairs.S"), skip=3, dec=".", strip.white=TRUE)
+tz <- read.csv(here("data/Cue_Target_Pairs.T-Z"), skip=3, dec=".", strip.white=TRUE)
+```
+
+```{r}
+#Combine files into one data frame
+df <- data.table::rbindlist(list(ab, c, df_c, gk, lo, pr, s, tz), fill = TRUE)
+test <- data.table::rbindlist(list(ab, c), fill = TRUE)
+```
+
+```{r}
+#filter for normed
+df <- df %>% 
+  filter(NORMED. == "YES")
+rownum <- nrow(df)
+```
+
+I analysed data from a word association study by Nelson, McEvoy and Schreiber (http://w3.usf.edu/FreeAssociation/Intro.html). This study prompted cue words to 72, 176 participants, who responded with an associated target word, and recorded data about the cue and target words. Data is recorded and defined in the table below. 
+```{r}
+
+#create data dictionary 
+datadict <- readxl::read_excel(here("data/hp2 data dict.xlsx"))
+datadict <- datadict[,c(1,3,2)]
+
+datadict %>% 
+  gt() %>% 
+  cols_label(
+    column = "Column",
+    `direct quote` = "Title",
+    definition = "Definition"
+  ) %>% 
+  opt_stylize(style=4)
+  
+```
+
+## Analytics 
+
+After filtering out non-normed words, `r rownum` rows of data remained.
+
+To check whether response words are usually more common than prompt words,
+I plotted the difference in frequency between cue-target pairs as a density graph. The frequency data was recorded as raw data from a corpus.
+
+```{r}
+#convert numeric values
+df2 <- df %>% 
+  mutate(QFR = as.numeric(QFR)) %>% 
+  mutate(TFR = as.numeric(TFR)) %>% 
+  mutate(BSG = as.numeric(BSG)) %>% 
+  mutate(t_rel_freq = as.numeric(TFR-QFR)) %>%
+  mutate(ispositive= as.numeric(t_rel_freq)>0)
+
+df2 %>% 
+  ggplot(mapping = aes(x = t_rel_freq))+
+  geom_density()+
+  scale_x_continuous(limits = c(-2500, 2500))+
+  labs(x="Difference between frequency of target and frequency of cue", y="Number of occurences")
+
+```
+There is a slight tendency for target words to be more frequent than cue words, but most pairs have near-zero difference between cue and target word frequency.
+I discarded data outside the -2500 and 2500 differences, since there were near-zero data points outside those bounds.
+
+
+To check whether patterns arose between the parts of speech of cue and target words, I charted the connections between cue and target parts of speech. 
+```{r}
+# The following code is for an unsuccessful alluvial chart
+# df21 <- as.data.frame(df2) %>%
+#   select(CUE, QPS, TPS) %>%
+#   filter(!is.na(TPS))
+# #Error in the data that target words "TRUE" and "FALSE" didn't get assigned TPS
+# df21 <- df21 %>%
+#   pivot_longer(cols = c(QPS, TPS), names_to = "cue_target", values_to = "pos")
+# 
+# df22 <- df21 %>% group_by_all() %>% summarise(COUNT = n())
+# 
+# # df22 <- to_lodes_form(df22,  key="cue_target", value="pos", id="CUE", weight="COUNT")
+# 
+# df22[sapply(
+# df22, is.character)] <- lapply(df22[sapply(df22, is.character)], as.factor)
+# 
+# #reformat data into alluvial form
+# df22 <- mutate(df22, ID = row_number())
+# df22 <- df22 %>% mutate("cue_target"= as.factor(c(cue_target)))
+# df23 <- unique(df22)
+# df23 <- df23[,c(5,2,3,4, 1)]
+# df23 <- group_by(df23)
+# df24 <- head(df23, 3)
+# 
+# #Check whether data is in appropriate alluvial form
+# is_lodes_form(df24, key="cue_target", value="pos", id="ID")
+# is_alluvia_form(df24, key="cue_target", value="pos", id="ID")
+# 
+# 
+# #Despite the above checks returning TRUE, I am unable to successfully plot an alluvial chart 
+# df24 %>% ggplot(aes(x="cue_target",alluvium = "ID", stratum="pos", fill="pos"))+
+#   geom_alluvium()
+
+```
+
+```{r}
+
+#reformat data longer in order to separately analyze cues and targets
+df2 <- df2 %>%
+  mutate("id"= row_number()) 
+
+df3 <- df2 %>% 
+  pivot_longer(cols = c(QPS, TPS), names_to = "cue_target", values_to = "pos")
+
+# I found that the parts of speech were inconsistently labeled, and replaced inconsistent abbreviations where I was able to tell what was intended
+inconsistencies <- c("ADV", "ADJ", "INT", "PRP")
+replacement_values <- c("AD", "AJ", "I", "PP")
+df3$pos <- replace(df3$pos, df3$pos %in% inconsistencies, replacement_values)
+#Other data whose part of speech was obscure I filtered out
+df3 <- df3 %>% 
+  filter(!pos %in% c("A", NA, "", "AD"))
+#create chart
+df3%>%
+  group_by(CUE) %>%
+  ggplot(mapping= aes(cue_target, pos, color=pos, group = id))+
+  geom_line(aes(alpha=0.00001))+
+  labs(x="Element", y="Part of speech")+
+  scale_y_discrete(labels = c("Adjective", "Adverb", "Conjunction", "Interjection", "Noun", "Pronoun", "Preposition", "Verb"))+
+  scale_color_colorblind(labels = c("Adjective", "Adverb", "Conjunction", "Interjection", "Noun", "Pronoun", "Preposition", "Verb"))
+```
+
+No strong trends stand out, though it appears less frequent for verbs to prompt adverbs, and for conjunctions to prompt pronouns. Conjunctions, in fact, appear only to prompt adjectives, nouns, verbs, and pronouns; never interjections,  adverbs, or prepositions. Interjections only prompt adjectives, nouns, verbs, and other interjections; never adverbs, conjunctions, pronouns, or prepositions.
+
+
+```{r}
+# import cmudict
+cmudict <- read.delim(here("data/cmudict.7b"),skip=126, sep="\n", strip.white = TRUE)
+
+#split CMU data into words and sounds
+cmudict <- cmudict %>% separate(col = `A..AH0`, 
+           into = c("word", "sound"), 
+           sep = "\\s+", convert = TRUE, extra="merge", fill = "right")
+```
+
+Using downloaded phonetic data from the CMUdictionary, I checked whether cue and target words tended to rhyme. The vast majority did not. Additionally, the proportion of words with a high Forward Cue-to-Target Strength was not noticeably higher in word pairs that rhymed than with word pairs that did not. 
+
+```{r}
+#Collect the rime, the portion of the sound after the emphasized syllable, inclusive (marked by the number 1 after a vowel sound)
+cmudict <- cmudict %>% 
+  mutate("rime" = strsplit(x= sound, split= "\\s(?=[^\\s]*1)", perl=TRUE))
+cmudict <- cmudict %>% 
+  mutate("rime" = sapply(rime,tail,1))
+```
+
+```{r}
+#Pivot data longer in order to attach rimes to cues and targets separately
+df4 <- df2 %>% 
+  pivot_longer(cols = c(CUE, TARGET),
+               names_to = "cue_target",
+               values_to = "word") %>% 
+  select(cue_target, word, id, FSG)
+df4 <- df4[,c(3,1,2, 4)] %>%
+  left_join(cmudict, join_by(word == word))
+#Split data into cues and targets
+df4_target <- df4 %>%
+  filter(cue_target == "TARGET")
+df4_cue <- df4 %>%
+  filter(cue_target == "CUE")
+#Rejoin data and check if rimes match
+df41 <- df4_cue %>%
+  left_join(df4_target, join_by(id)) %>%
+  mutate("match"= rime.x==rime.y) %>%
+  filter(!is.na(match))
+
+comparechart <- df41 %>% ggplot(aes(match)) +
+  geom_bar(aes(group = FSG.x, color=`FSG.x`))+
+  labs(x="Cue and target rhyme?", y="Number of occurences", color="Forward Cue-to-Target Strength")
+
+rimechart <- df41 %>% 
+  filter(match == TRUE) %>% 
+  ggplot(aes(match)) +
+  geom_bar(aes(group = FSG.x, color=`FSG.x`))+
+  labs(x="Cue and target rhyme?", y="Number of occurences", color="Forward Cue-to-Target Strength")
+comparechart
+rimechart
+```
+
+
+I checked whether words which prompted overlapping targets also tended to mutually prompt each other. I found that there were some words without much overlapping associate strength, which had strong two-way links, but that the general trend was for words not to have two-way links. 
+
+```{r}
+
+# #O or #M correlate with FSG*BSG
+df2 %>% 
+  mutate("mutual" = FSG*BSG) %>% 
+  #i'm ignoring things without overlapping data
+  filter(mutual>0) %>% 
+  ggplot(aes(as.numeric(OSG), mutual))+
+  geom_point()+
+  stat_smooth()+
+  labs(x="Overlapping Associate Strength", y="Frequency of two-way links")
+```
+
